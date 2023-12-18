@@ -1,4 +1,5 @@
-const isAuthenticated = (req, res, next) => {
+const checkAuthenticated = (req, res, next) => {
+    console.log(`auth middleware: ${req.isAuthenticated()}`)
     if (req.user) {
         next()
     } else {
@@ -9,4 +10,4 @@ const isAuthenticated = (req, res, next) => {
     }
 }
 
-module.exports = isAuthenticated
+module.exports = checkAuthenticated 

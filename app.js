@@ -2,48 +2,61 @@ const express = require('express')
 const cors = require('cors')
 const session = require('express-session');
 const cookieParser = require("cookie-parser");
-const ioRedis = require('ioredis')
-const RedisStore = require('connect-redis').default
+const mongoose = require('mongoose');
+// const cookieSession = require('cookie-session')
 const passport = require('passport')
-const connectMongo = require('./connectMongo')
-const isAuthenticated = require('./middlewares/authMiddleware')
+const MongoStore = require('connect-mongo')(session);
+const connectDB = require('./connectMongo')
+const checkAuthenticated = require('./middlewares/authMiddleware')
 require('dotenv').config();
 require('./passport/googleStrategy')
 
 const PORT = process.env.PORT || 8000
-const redisConfig = {
-    password: process.env.REDIS_PASSWORD,
-    host: process.env.REDIS_HOST,
-    port: process.env.REDIS_PORT
-}
-const redisClient = new ioRedis(redisConfig);
-const redisStore = new RedisStore({ client: redisClient })
-connectMongo()
-redisClient.on('connect', () => {
-    console.log('Connected to Redis...');
-});
-
+connectDB()
+// const MongoStore = new connectMongo(session);
 const app = express()
 app.use(cors({
     origin: [process.env.LOCAL_FRONTEND_URL],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }))
-app.use(cookieParser())
+// app.use(cookieParser())
+// app.use(express.json())
 app.set('trust proxy', 1)
 app.use(session({
     secret: 'keyboard cat',
     resave: false,
     saveUninitialized: true,
     cookie: { 
-        secure: false,
+        // secure: false,
         maxAge: 60 * 1000,
+        // sameSite: 'None'
     },
-    store: redisStore
+    store: new MongoStore({ 
+        url: process.env.MONGO_URI,
+        mongooseConnection: mongoose.connection,
+        collection: 'sessions',
+        autoRemove: 'native',
+    })
 }))
-app.use(express.json())
+// app.use(cookieSession({
+//     maxAge: 60 * 1000,
+//     keys: ['xxx'],
+//     httpOnly: true,
+//     // sameSite: 'none',
+//     // secure: 'auto'
+// }))
 app.use(passport.initialize())
 app.use(passport.session())
+
+app.get('/', checkAuthenticated, (req, res) => {
+    console.log(req.user)
+    res.json({
+        success: true,
+        message: 'Auth successful!',
+        user: req.user ? req.user : null
+    })
+})
 
 app.get('/auth/google',
     passport.authenticate('google', { scope: ['email', 'profile'] })
@@ -52,23 +65,14 @@ app.get('/auth/google',
 app.get(
     '/auth/google/callback',
     passport.authenticate('google', {
-        successRedirect: '/auth/google/success',
         failureRedirect: '/auth/google/failure'
-    })
+    }),
+    (req, res) => {
+        // console.log(req.user, req.isAuthenticated(), req.session)
+        console.log('Auth successful...')
+        res.redirect(`${process.env.LOCAL_FRONTEND_URL}`)
+    }
 );
-
-app.get('/auth/google/success', (req, res) => {
-    res.redirect(`${process.env.LOCAL_FRONTEND_URL}`)
-})
-
-app.use('/', isAuthenticated, (req, res) => {
-    console.log(req.user)
-    res.json({
-        success: true,
-        message: 'Auth successful!',
-        user: req.user ? req.user : null
-    })
-})
 
 app.get('/auth/google/failure', (req, res) => {
     res.json({
