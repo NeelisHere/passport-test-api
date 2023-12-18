@@ -10,7 +10,7 @@ passport.use(
         passReqToCallback: true
     },
     async (request, accessToken, refreshToken, profile, done) => {
-        const { sub, name, email } = profile._json
+        const { sub, name, email, picture } = profile._json
         // console.log(user)
         let user = await UserModel.findOne({ googleId: sub })
         if (!user) {
@@ -18,6 +18,7 @@ passport.use(
                 googleId: sub,
                 username: name,
                 email,
+                picture
             })
         }
         return done(null, user);

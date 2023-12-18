@@ -3,8 +3,10 @@ const cors = require('cors')
 const session = require('express-session');
 const cookieParser = require("cookie-parser");
 const ioRedis = require('ioredis')
+const RedisStore = require('connect-redis').default
 const passport = require('passport')
 const connectMongo = require('./connectMongo')
+const isAuthenticated = require('./middlewares/authMiddleware')
 require('dotenv').config();
 require('./passport/googleStrategy')
 
@@ -15,12 +17,13 @@ const redisConfig = {
     port: process.env.REDIS_PORT
 }
 const redisClient = new ioRedis(redisConfig);
+const redisStore = new RedisStore({ client: redisClient })
 connectMongo()
-const app = express()
-
 redisClient.on('connect', () => {
     console.log('Connected to Redis...');
 });
+
+const app = express()
 app.use(cors({
     origin: [process.env.LOCAL_FRONTEND_URL],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -32,17 +35,15 @@ app.use(session({
     secret: 'keyboard cat',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }
+    cookie: { 
+        secure: false,
+        maxAge: 60 * 1000,
+    },
+    store: redisStore
 }))
 app.use(express.json())
 app.use(passport.initialize())
 app.use(passport.session())
-
-
-
-// app.use('/', (req, res) => {
-//     res.json({ success: true })
-// })
 
 app.get('/auth/google',
     passport.authenticate('google', { scope: ['email', 'profile'] })
@@ -57,6 +58,11 @@ app.get(
 );
 
 app.get('/auth/google/success', (req, res) => {
+    res.redirect(`${process.env.LOCAL_FRONTEND_URL}`)
+})
+
+app.use('/', isAuthenticated, (req, res) => {
+    console.log(req.user)
     res.json({
         success: true,
         message: 'Auth successful!',
@@ -68,6 +74,15 @@ app.get('/auth/google/failure', (req, res) => {
     res.json({
         success: false,
         message: 'Auth failed!'
+    })
+})
+
+app.get('/auth/logout', (req, res) => {
+    req.logout();
+    req.session = null
+    res.status(200).json({
+        success: true,
+        user: null
     })
 })
 
