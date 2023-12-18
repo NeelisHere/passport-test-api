@@ -1,71 +1,81 @@
+/******************************* imports **************************************/
 const express = require('express')
 const cors = require('cors')
-const { createClient } = require('redis');
-const { nanoid } = require('nanoid');
+// const session = require('express-session');
+const cookieParser = require("cookie-parser");
+const cookieSession = require('cookie-session')
+const ioRedis = require('ioredis')
+const RedisStore = require('connect-redis').default
 require('dotenv').config();
 
-const PORT = process.env.PORT || 8000
+//------------------------ constants ------------------------------
 const redisConfig = {
     password: process.env.REDIS_PASSWORD,
-    socket: {
-        host: process.env.REDIS_HOST,
-        port: process.env.REDIS_PORT
-    }
+    host: process.env.REDIS_HOST,
+    port: process.env.REDIS_PORT
 }
+const PORT = process.env.PORT || 8000
+
+//------------------------------- initializations ------------------------------
 
 const app = express()
+const client = new ioRedis(redisConfig);
+client.on('connect', () => {
+    console.log('Redis Client Connected...');
+})
+const redisStore = new RedisStore({ client })
+
+//---------------------------- Middlewares ------------------------------------
 
 app.use(cors({
     origin: [process.env.FRONTEND_URL],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    // credentials: true
+    credentials: true
+}))
+app.use(cookieParser())
+// app.set('trust proxy', 1) 
+app.use(cookieSession({
+    maxAge: 20 * 1000,
+    keys: ['secret-key'],
+    httpOnly: true,
+    // sameSite: 'none',
+    // secure: 'auto'
 }))
 app.use(express.json())
 
+app.use((req, res, next) => {
+    const op = {
+        isChanged: req.session.isChanged,
+        isNew: req.session.isNew,
+        isPopulated: req.session.isPopulated
+    }
+    console.log(op)
+    req.session = req.body
+    console.log(op)
+    next()
+})
+
+/************************************** Routes *************************************/
 
 app.get('/', (req, res) => {
-    res.send('welcome')
+    // console.log(req.session)
+    // console.log(req.session.id)
+    res.json({ success: true })
 })
-
-const server = require('http').createServer(app)
-
-const io = require('socket.io')(server, {
-    pingTimeout: 60000,
-    cors: {
-        origin: process.env.FRONTEND_URL
+app.post('/test', (req, res) => {
+    const op = {
+        isChanged: req.session.isChanged,
+        isNew: req.session.isNew,
+        isPopulated: req.session.isPopulated
     }
+    console.log(op)
+    console.log(req.session, req.session.id)
+    console.log(op)
+    // console.log(req.body)
+    console.log('---')
+    res.json({ data: req.body, url: req.url })
 })
 
-const main = async () => {
-    const client = createClient(redisConfig);
-    await client.connect()
-
-    const clientPub = client.duplicate()
-    await clientPub.connect()
-    const clientSub = client.duplicate()
-    await clientSub.connect()
-
-    io.on('connection', async (socket) => {
-        console.log(socket.id)
-        socket.on('join-room', async ({ roomId }) => {
-            console.log(roomId)
-            await client.sAdd(`room:${roomId}`, socket.id)
-            await clientSub.subscribe(`room:${roomId}`)
-        })
-        socket.on('message', async ({ text }) => {
-            console.log(text, socket.id)
-        })
-
-        socket.on('disconnect', async (reason) => {
-            console.log(reason)
-            // await client.unsubscribe(roomId)
-            // await client.sRem(`room:${roomId}`, socket.id)
-        })
-    })
-
-    server.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`)
-    })
-}
-
-main()
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`)
+})
