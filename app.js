@@ -24,8 +24,9 @@ app.use(cors({
 // app.use(express.json())
 app.set('trust proxy', 1)
 app.use(session({
+    name: 'auth-token',
     secret: 'keyboard cat',
-    resave: false,
+    resave: true,
     saveUninitialized: true,
     cookie: { 
         // secure: false,
@@ -82,12 +83,19 @@ app.get('/auth/google/failure', (req, res) => {
 })
 
 app.get('/auth/logout', (req, res) => {
-    req.logout();
     req.session = null
-    res.status(200).json({
-        success: true,
-        user: null
-    })
+    req.logout((err) => {
+        if (err) {
+            console.log(err);
+            res.status(401).json({
+                success: false,
+                message: 'Logout failed!'
+            })
+        } else {
+            res.cookie('auth-token', null)
+            res.redirect(`${process.env.LOCAL_FRONTEND_URL}/auth/register`)
+        }
+    });
 })
 
 app.listen(PORT, () => {
