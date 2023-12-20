@@ -1,6 +1,12 @@
 const passport = require('passport')
-const GoogleStrategy = require('passport-google-oauth2').Strategy;
+const logger = require('../logger');
 const UserModel = require('../models/UserModel')
+const GoogleStrategy = require('passport-google-oauth2').Strategy;
+const LocalStrategy = require('passport-local').Strategy;
+// const logger = require('../logger')
+// const passportJWT = require("passport-jwt");
+// const JWTStrategy = passportJWT.Strategy;
+// const ExtractJWT = passportJWT.ExtractJwt;
 
 passport.use(
     new GoogleStrategy({
@@ -20,15 +26,31 @@ passport.use(
     }
 ));
 
+passport.use(new LocalStrategy({
+        usernameField: 'email',
+        passwordField: 'password'
+    },
+    async (email, password, done) => {
+        console.info('inside verify user callback')
+        const user = await UserModel.findOne({ email }).select('-picture')
+        console.log(user)
+        if (!user) {
+            done(null, false);
+        } else {
+            done(null, user)
+        }
+    }
+));
+
 passport.serializeUser((user, done) => {
-    console.log('serialize')
+    console.log('serialize', user)
     done(null, user._id);
 });
 passport.deserializeUser(async (id, done) => {
     console.log('--deserialize')
     try {
-        const user = await UserModel.findById(id)
-        // console.log(user)
+        const user = await UserModel.findById(id).select('-picture')
+        console.log(id, user)
         done(null, user)
     } catch (error) {
         console.log(error)

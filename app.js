@@ -4,6 +4,7 @@ const session = require('express-session');
 const cookieParser = require("cookie-parser");
 const mongoose = require('mongoose');
 // const cookieSession = require('cookie-session')
+const logger = require('./logger');
 const passport = require('passport')
 const MongoStore = require('connect-mongo')(session);
 const connectDB = require('./connectMongo')
@@ -20,33 +21,27 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }))
-// app.use(cookieParser())
-// app.use(express.json())
+app.use(cookieParser())
+app.use(express.json())
 app.set('trust proxy', 1)
 app.use(session({
     name: 'auth-token',
     secret: 'keyboard cat',
     resave: true,
     saveUninitialized: true,
-    cookie: { 
+    cookie: {
         // secure: false,
         maxAge: 60 * 1000,
         // sameSite: 'None'
     },
-    store: new MongoStore({ 
+    store: new MongoStore({
         url: process.env.MONGO_URI,
         mongooseConnection: mongoose.connection,
         collection: 'sessions',
         autoRemove: 'native',
     })
 }))
-// app.use(cookieSession({
-//     maxAge: 60 * 1000,
-//     keys: ['xxx'],
-//     httpOnly: true,
-//     // sameSite: 'none',
-//     // secure: 'auto'
-// }))
+
 app.use(passport.initialize())
 app.use(passport.session())
 
@@ -96,6 +91,23 @@ app.get('/auth/logout', (req, res) => {
             res.redirect(`${process.env.LOCAL_FRONTEND_URL}/auth/register`)
         }
     });
+})
+
+app.post('/login', 
+    passport.authenticate('local', { failureRedirect: '/auth/local/failure' }),
+    (req, res) => {
+        res.json({ 
+            success: true,
+            data: req.body
+        })
+    }
+);
+
+app.get('/auth/local/failure', (req, res) => {
+    res.json({
+        success: false,
+        message: 'local login auth failed!'
+    })
 })
 
 app.listen(PORT, () => {
